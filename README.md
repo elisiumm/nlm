@@ -17,6 +17,28 @@ A fast Rust CLI for [NotebookLM](https://notebooklm.google.com) — sync sources
 
 ## Installation
 
+### Pre-built binary (recommended)
+
+Download the latest release for your platform from the [Releases page](https://github.com/elisiumm/nlm/releases).
+
+```bash
+# macOS Apple Silicon
+curl -L https://github.com/elisiumm/nlm/releases/latest/download/nlm-VERSION-aarch64-apple-darwin.tar.gz | tar -xz
+sudo mv nlm /usr/local/bin/
+
+# macOS Intel
+curl -L https://github.com/elisiumm/nlm/releases/latest/download/nlm-VERSION-x86_64-apple-darwin.tar.gz | tar -xz
+sudo mv nlm /usr/local/bin/
+
+# Linux x86_64
+curl -L https://github.com/elisiumm/nlm/releases/latest/download/nlm-VERSION-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+sudo mv nlm /usr/local/bin/
+```
+
+Replace `VERSION` with the tag from the [Releases page](https://github.com/elisiumm/nlm/releases) (e.g. `v0.1.0`).
+
+### Build from source
+
 **Prerequisites**: [Rust stable](https://rustup.rs/)
 
 ```bash

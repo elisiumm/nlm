@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create release
+        run: gh release create ${{ github.ref_name }} --title "nlm ${{ github.ref_name }}" --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-release:
+    name: Build release — ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    needs: create-release
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Strip binary (Linux)
+        if: runner.os == 'Linux'
+        run: strip target/${{ matrix.target }}/release/nlm
+
+      - name: Strip binary (macOS)
+        if: runner.os == 'macOS'
+        run: strip -x target/${{ matrix.target }}/release/nlm
+
+      - name: Set archive name
+        run: echo "ARCHIVE=nlm-${{ github.ref_name }}-${{ matrix.target }}.tar.gz" >> $GITHUB_ENV
+
+      - name: Create archive
+        run: tar -czf ${{ env.ARCHIVE }} -C target/${{ matrix.target }}/release nlm
+
+      - name: Generate checksum
+        run: shasum -a 256 ${{ env.ARCHIVE }} > ${{ env.ARCHIVE }}.sha256
+
+      - name: Upload to release
+        run: gh release upload ${{ github.ref_name }} ${{ env.ARCHIVE }} ${{ env.ARCHIVE }}.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
