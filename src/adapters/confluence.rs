@@ -10,17 +10,27 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-use crate::config::Source;
 use super::{safe_filename, SourceAdapter};
+use crate::config::Source;
 
 pub struct ConfluenceAdapter;
 
 impl SourceAdapter for ConfluenceAdapter {
     async fn fetch(&self, source: &Source, output_dir: &Path) -> Result<Option<PathBuf>> {
         let (id, title, step, step_label, src_base_url) = match source {
-            Source::Confluence { id, title, step, step_label, base_url } => {
-                (id.as_str(), title.as_str(), *step, step_label.as_deref(), base_url.as_deref())
-            }
+            Source::Confluence {
+                id,
+                title,
+                step,
+                step_label,
+                base_url,
+            } => (
+                id.as_str(),
+                title.as_str(),
+                *step,
+                step_label.as_deref(),
+                base_url.as_deref(),
+            ),
             _ => unreachable!("ConfluenceAdapter called with non-Confluence source"),
         };
 
@@ -33,8 +43,17 @@ impl SourceAdapter for ConfluenceAdapter {
         // Credential dispatch — same priority as the Python adapter
         match (user, rest_token, mcp_token) {
             (Some(user), Some(token), _) => {
-                fetch_rest(id, title, step, step_label, src_base_url, &user, &token, &out_file)
-                    .await?;
+                fetch_rest(
+                    id,
+                    title,
+                    step,
+                    step_label,
+                    src_base_url,
+                    &user,
+                    &token,
+                    &out_file,
+                )
+                .await?;
             }
             (_, _, Some(_)) => {
                 // MCP requires the `mcp` crate with async streaming sessions.
@@ -59,6 +78,7 @@ impl SourceAdapter for ConfluenceAdapter {
 
 // ── REST fetch ────────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 async fn fetch_rest(
     page_id: &str,
     title: &str,
@@ -126,7 +146,12 @@ async fn fetch_rest(
 
 /// Prepend "## Étape N — <label>" and "### <title>" when step metadata is present.
 /// Mirrors `_build_md_with_step()` in the Python adapter.
-fn build_md_with_step(title: &str, body: &str, step: Option<u32>, step_label: Option<&str>) -> String {
+fn build_md_with_step(
+    title: &str,
+    body: &str,
+    step: Option<u32>,
+    step_label: Option<&str>,
+) -> String {
     match (step, step_label) {
         (Some(n), Some(label)) => format!("## Étape {n} — {label}\n\n### {title}\n\n{body}"),
         _ => body.to_string(),

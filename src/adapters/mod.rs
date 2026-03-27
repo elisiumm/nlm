@@ -36,7 +36,7 @@ pub trait SourceAdapter {
 /// Sanitize a title for safe use as a filename.
 /// Mirrors the `.replace(":", "-").replace("/", "-")` in each Python adapter.
 pub fn safe_filename(title: &str) -> String {
-    title.replace(':', "-").replace('/', "-")
+    title.replace([':', '/'], "-")
 }
 
 // ── Dispatcher ────────────────────────────────────────────────────────────────
@@ -58,7 +58,11 @@ pub async fn sync_all_sources(sources: &[Source], output_dir: &Path) -> Result<(
         let result: Result<Option<PathBuf>> = match source {
             Source::Url { .. } => url::UrlAdapter.fetch(source, output_dir).await,
             Source::File { .. } => file::FileAdapter.fetch(source, output_dir).await,
-            Source::Confluence { .. } => confluence::ConfluenceAdapter.fetch(source, output_dir).await,
+            Source::Confluence { .. } => {
+                confluence::ConfluenceAdapter
+                    .fetch(source, output_dir)
+                    .await
+            }
             // Notion requires MCP + OAuth — deferred to Phase 3
             Source::Notion { .. } => {
                 println!("skipped  (Notion — Phase 3)");
