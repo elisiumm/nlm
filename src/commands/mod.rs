@@ -9,7 +9,7 @@
 //   - if let Some(x) for optional config fields
 //   - String::from / to_string() vs &str for ownership at call sites
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
@@ -101,13 +101,25 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
         }
 
         // `correct` is a specialised generate — Phase 3b
-        Command::Correct { .. } => stub("correct (Phase 3b — targeted slide correction)"),
+        Command::Correct {
+            prompt,
+            slide,
+            notebook_id,
+            project,
+            language,
+            dirs,
+        } => {
+            cmd_correct(
+                project.as_deref(),
+                language.as_deref(),
+                &notebook_id,
+                slide,
+                &prompt,
+                &dirs,
+            )
+            .await
+        }
     }
-}
-
-fn stub(label: &str) -> Result<()> {
-    println!("[not yet implemented — {}]", label);
-    Ok(())
 }
 
 // ── Helper: build a NotebookLMClient from saved session tokens ────────────────
@@ -258,6 +270,83 @@ async fn cmd_generate(
     let artifact = client.wait_for_artifact(notebook_id, &artifact_id).await?;
     println!(" done");
 
+    let out_dir = dirs.output_dir.join("slide-deck");
+    tokio::fs::create_dir_all(&out_dir).await?;
+    let label = project.unwrap_or(notebook_id);
+    let dest = out_dir.join(format!("{label}.pdf"));
+
+    print!("  Downloading PDF…");
+    std::io::stdout().flush().ok();
+    client.download_slide_deck(&artifact, &dest).await?;
+    println!(" {}", dest.display());
+
+    Ok(())
+}
+
+// ── correct ───────────────────────────────────────────────────────────────────
+
+/// Revise one slide in an existing completed slide deck.
+///
+/// Flow:
+///   1. Find the most recent COMPLETED slide deck in the notebook.
+///   2. Call REVISE_SLIDE RPC with the artifact ID, zero-based slide index, and prompt.
+///   3. Poll until the revised deck is COMPLETED.
+///   4. Download the updated PDF.
+///
+/// The CLI accepts 1-based slide numbers; the RPC uses 0-based indices.
+async fn cmd_correct(
+    project: Option<&str>,
+    _language: Option<&str>,
+    notebook_id: &str,
+    slide: u32,
+    prompt: &str,
+    dirs: &crate::cli::DirArgs,
+) -> Result<()> {
+    let client = make_client().await?;
+
+    println!("\n── Correct  (notebook: {notebook_id})");
+    println!("  Notebook : {notebook_id}");
+    println!("  Slide    : {slide}");
+    println!("  Prompt   : {prompt}");
+
+    // ── Step 1: find the most recent completed slide deck ─────────────────
+    let artifacts = client.list_artifacts_raw(notebook_id).await?;
+    let slide_art = artifacts.iter().find(|a| {
+        a[2].as_i64() == Some(ARTIFACT_SLIDE_DECK)
+            && a[4].as_i64() == Some(STATUS_COMPLETED)
+    });
+
+    let Some(existing) = slide_art else {
+        anyhow::bail!(
+            "No completed slide deck found in notebook {notebook_id}.\n\
+             Generate one first with: nlm generate --notebook-id {notebook_id}"
+        );
+    };
+
+    let artifact_id = existing[0].as_str()
+        .context("Existing slide deck: artifact ID is not a string")?
+        .to_string();
+
+    println!("  Artifact : {artifact_id}");
+
+    // ── Step 2: revise the slide (1-based CLI → 0-based RPC) ─────────────
+    print!("  Revising…");
+    use std::io::Write as _;
+    std::io::stdout().flush().ok();
+
+    let slide_index = slide.saturating_sub(1); // 1-based → 0-based
+    let revised_id = client
+        .revise_slide(notebook_id, &artifact_id, slide_index, prompt)
+        .await?;
+
+    println!(" queued ({revised_id})");
+    print!("  Waiting for completion…");
+    std::io::stdout().flush().ok();
+
+    let artifact = client.wait_for_artifact(notebook_id, &revised_id).await?;
+    println!(" done");
+
+    // ── Step 3: download revised PDF ─────────────────────────────────────
     let out_dir = dirs.output_dir.join("slide-deck");
     tokio::fs::create_dir_all(&out_dir).await?;
     let label = project.unwrap_or(notebook_id);

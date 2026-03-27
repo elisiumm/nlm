@@ -270,6 +270,36 @@ impl NotebookLMClient {
         Ok(artifact_id)
     }
 
+    /// Revise a single slide in a completed slide deck. Returns the artifact ID for polling.
+    ///
+    /// Params validated from notebooklm-py _artifacts.py revise_slide():
+    /// `[[2], artifact_id, [[[slide_index, prompt]]]]`
+    /// where `slide_index` is zero-based.
+    ///
+    /// The returned artifact ID is used for polling via `wait_for_artifact`.
+    pub async fn revise_slide(
+        &self,
+        notebook_id: &str,
+        artifact_id: &str,
+        slide_index: u32,
+        prompt: &str,
+    ) -> Result<String> {
+        let source_path = format!("/notebook/{notebook_id}");
+        let params = json!([
+            [2],
+            artifact_id,
+            [[[slide_index, prompt]]]
+        ]);
+
+        let result = self.rpc(REVISE_SLIDE, &params, &source_path).await?;
+
+        // result[0][0] = artifact_id (same structure as CREATE_ARTIFACT)
+        let revised_id = result[0][0].as_str()
+            .context("REVISE_SLIDE: missing artifact ID at result[0][0]")?
+            .to_string();
+        Ok(revised_id)
+    }
+
     /// List raw artifacts for a notebook.
     ///
     /// Params validated from _artifacts.py list():

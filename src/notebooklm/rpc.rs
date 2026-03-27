@@ -46,6 +46,7 @@ pub const DELETE_SOURCE:    &str = "tGMBJ";
 
 pub const CREATE_ARTIFACT:  &str = "R7cb6c";
 pub const LIST_ARTIFACTS:   &str = "gArtLc";
+pub const REVISE_SLIDE:     &str = "KmcKPe"; // Targeted single-slide revision
 
 // Artifact type codes (from rpc/types.py ArtifactTypeCode)
 #[allow(dead_code)] pub const ARTIFACT_AUDIO:      i64 = 1;
