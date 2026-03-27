@@ -29,7 +29,9 @@ pub struct AuthTokens {
 /// Default path for the Playwright storage state file.
 pub fn default_storage_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_default();
-    PathBuf::from(home).join(".notebooklm").join("storage_state.json")
+    PathBuf::from(home)
+        .join(".notebooklm")
+        .join("storage_state.json")
 }
 
 /// Load cookies from `storage_state.json` and fetch CSRF + session tokens
@@ -40,14 +42,15 @@ pub async fn load_tokens(storage_path: Option<&std::path::Path>) -> Result<AuthT
         .unwrap_or_else(default_storage_path);
 
     // Sync read is fine for a small JSON config file.
-    let raw = std::fs::read_to_string(&path)
-        .with_context(|| format!(
+    let raw = std::fs::read_to_string(&path).with_context(|| {
+        format!(
             "Cannot read storage state: {}\n  Run: nlm login",
             path.display()
-        ))?;
+        )
+    })?;
 
-    let state: serde_json::Value = serde_json::from_str(&raw)
-        .context("storage_state.json is not valid JSON")?;
+    let state: serde_json::Value =
+        serde_json::from_str(&raw).context("storage_state.json is not valid JSON")?;
 
     // Playwright storage_state format:
     // { "cookies": [{ "name": "...", "value": "...", "domain": "...", ... }], ... }
@@ -82,7 +85,11 @@ pub async fn load_tokens(storage_path: Option<&std::path::Path>) -> Result<AuthT
     // Fetch homepage to get CSRF tokens.
     let (snlm0e, fdrfje) = fetch_csrf_tokens(&cookie_header).await?;
 
-    Ok(AuthTokens { cookie_header, snlm0e, fdrfje })
+    Ok(AuthTokens {
+        cookie_header,
+        snlm0e,
+        fdrfje,
+    })
 }
 
 // ── CSRF token extraction ──────────────────────────────────────────────────
@@ -98,10 +105,12 @@ async fn fetch_csrf_tokens(cookie_header: &str) -> Result<(String, String)> {
         .get(NOTEBOOKLM_URL)
         .header(reqwest::header::COOKIE, cookie_header)
         // Impersonate a real browser to avoid bot detection.
-        .header(reqwest::header::USER_AGENT,
+        .header(
+            reqwest::header::USER_AGENT,
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
              AppleWebKit/537.36 (KHTML, like Gecko) \
-             Chrome/120.0.0.0 Safari/537.36")
+             Chrome/120.0.0.0 Safari/537.36",
+        )
         .send()
         .await
         .context("Failed to reach NotebookLM homepage")?
@@ -164,8 +173,8 @@ pub fn build_cookie_jar(storage_path: Option<&std::path::Path>) -> Result<reqwes
 
     for c in &cookies {
         let domain = c["domain"].as_str().unwrap_or("");
-        let name   = c["name"].as_str().unwrap_or("");
-        let value  = c["value"].as_str().unwrap_or("");
+        let name = c["name"].as_str().unwrap_or("");
+        let value = c["value"].as_str().unwrap_or("");
 
         if name.is_empty() || value.is_empty() {
             continue;
@@ -191,10 +200,7 @@ pub fn build_cookie_jar(storage_path: Option<&std::path::Path>) -> Result<reqwes
         let host = domain.trim_start_matches('.');
         let url_str = format!("https://{host}/");
         if let Ok(url) = url_str.parse::<reqwest::Url>() {
-            jar.add_cookie_str(
-                &format!("{name}={value}; Domain={domain}; Path=/"),
-                &url,
-            );
+            jar.add_cookie_str(&format!("{name}={value}; Domain={domain}; Path=/"), &url);
         }
     }
 

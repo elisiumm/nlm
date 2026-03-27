@@ -9,8 +9,8 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-use crate::config::Source;
 use super::SourceAdapter;
+use crate::config::Source;
 
 const SUPPORTED_EXTS: &[&str] = &["md", "txt", "pdf"];
 
@@ -46,10 +46,7 @@ impl SourceAdapter for FileAdapter {
             .canonicalize()
             .with_context(|| format!("Source file not found: {}", src.display()))?;
 
-        let ext = src
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         if !SUPPORTED_EXTS.contains(&ext) {
             anyhow::bail!(

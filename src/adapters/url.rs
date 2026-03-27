@@ -10,8 +10,8 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-use crate::config::Source;
 use super::{safe_filename, SourceAdapter};
+use crate::config::Source;
 
 pub struct UrlAdapter;
 

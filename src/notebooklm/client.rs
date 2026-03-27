@@ -17,9 +17,9 @@ use std::path::Path;
 use std::time::Duration;
 use tokio::time::sleep;
 
-use std::sync::Arc;
-use crate::notebooklm::auth::{AuthTokens, build_cookie_jar};
+use crate::notebooklm::auth::{build_cookie_jar, AuthTokens};
 use crate::notebooklm::rpc::{self, *};
+use std::sync::Arc;
 
 // ── NotebookLMClient ────────────────────────────────────────────────────────
 
@@ -35,7 +35,11 @@ impl NotebookLMClient {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
             .build()?;
-        Ok(Self { tokens, http, debug: false })
+        Ok(Self {
+            tokens,
+            http,
+            debug: false,
+        })
     }
 
     // ── Core RPC call ──────────────────────────────────────────────────────
@@ -49,14 +53,20 @@ impl NotebookLMClient {
         let url = rpc::rpc_url(method_id, &self.tokens.fdrfje, source_path);
         let body = rpc::rpc_body(method_id, params, &self.tokens.snlm0e)?;
 
-        let resp = self.http
+        let resp = self
+            .http
             .post(&url)
             .header(reqwest::header::COOKIE, &self.tokens.cookie_header)
-            .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .header(reqwest::header::USER_AGENT,
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded",
+            )
+            .header(
+                reqwest::header::USER_AGENT,
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
                  AppleWebKit/537.36 (KHTML, like Gecko) \
-                 Chrome/120.0.0.0 Safari/537.36")
+                 Chrome/120.0.0.0 Safari/537.36",
+            )
             .body(body)
             .send()
             .await
@@ -65,7 +75,9 @@ impl NotebookLMClient {
         resp.error_for_status_ref()
             .with_context(|| format!("RPC {method_id} returned HTTP error"))?;
 
-        let text = resp.text().await
+        let text = resp
+            .text()
+            .await
             .with_context(|| format!("Failed to read RPC {method_id} response body"))?;
 
         if self.debug {
@@ -82,7 +94,9 @@ impl NotebookLMClient {
     /// Params: `[null, 1, null, [2]]` (validated against notebooklm-py _notebooks.py)
     /// Returns: array of notebook arrays, or empty array if none.
     pub async fn list_notebooks(&self) -> Result<Value> {
-        let result = self.rpc(LIST_NOTEBOOKS, &json!([null, 1, null, [2]]), "/").await?;
+        let result = self
+            .rpc(LIST_NOTEBOOKS, &json!([null, 1, null, [2]]), "/")
+            .await?;
         // result is null when no notebooks, otherwise result[0] = array of notebooks.
         match result {
             Value::Null => Ok(Value::Array(vec![])),
@@ -100,7 +114,8 @@ impl NotebookLMClient {
         for nb in arr {
             // nb[0] = title, nb[2] = ID (UUID)
             if nb[0].as_str() == Some(name) {
-                let id = nb[2].as_str()
+                let id = nb[2]
+                    .as_str()
                     .context("Notebook ID is not a string")?
                     .to_string();
                 return Ok(id);
@@ -108,9 +123,12 @@ impl NotebookLMClient {
         }
 
         // Create — params: [title, null, null, [2], [1]]
-        let result = self.rpc(CREATE_NOTEBOOK, &json!([name, null, null, [2], [1]]), "/").await?;
+        let result = self
+            .rpc(CREATE_NOTEBOOK, &json!([name, null, null, [2], [1]]), "/")
+            .await?;
         // result[0] = notebook_id
-        let id = result[0].as_str()
+        let id = result[0]
+            .as_str()
             .context("CREATE_NOTEBOOK: missing notebook ID in response")?
             .to_string();
         Ok(id)
@@ -126,11 +144,13 @@ impl NotebookLMClient {
     /// Status is at `src[3][1]`.
     pub async fn list_sources(&self, notebook_id: &str) -> Result<Vec<Value>> {
         let source_path = format!("/notebook/{notebook_id}");
-        let result = self.rpc(
-            GET_NOTEBOOK,
-            &json!([notebook_id, null, [2], null, 0]),
-            &source_path,
-        ).await?;
+        let result = self
+            .rpc(
+                GET_NOTEBOOK,
+                &json!([notebook_id, null, [2], null, 0]),
+                &source_path,
+            )
+            .await?;
 
         // result[0] = nb_info, nb_info[1] = sources list
         let sources = result[0][1].clone();
@@ -155,7 +175,8 @@ impl NotebookLMClient {
 
             if let Some(id) = src_id {
                 // params: [[[source_id]]]  (validated from _sources.py delete())
-                self.rpc(DELETE_SOURCE, &json!([[[id]]]), &source_path).await
+                self.rpc(DELETE_SOURCE, &json!([[[id]]]), &source_path)
+                    .await
                     .with_context(|| format!("Failed to delete source {id}"))?;
             }
         }
@@ -184,7 +205,8 @@ impl NotebookLMClient {
         let result = self.rpc(ADD_SOURCE, &params, &source_path).await?;
 
         // result[0] = source_id string (from Source.from_api_response in Python)
-        let src_id = result[0].as_str()
+        let src_id = result[0]
+            .as_str()
             .context("ADD_SOURCE: missing source ID in response")?
             .to_string();
         Ok(src_id)
@@ -194,7 +216,8 @@ impl NotebookLMClient {
     pub async fn upload_dir(&self, notebook_id: &str, md_dir: &Path) -> Result<Vec<String>> {
         let mut ids = Vec::new();
 
-        let mut entries = tokio::fs::read_dir(md_dir).await
+        let mut entries = tokio::fs::read_dir(md_dir)
+            .await
             .with_context(|| format!("Cannot read directory: {}", md_dir.display()))?;
 
         while let Some(entry) = entries.next_entry().await? {
@@ -209,14 +232,17 @@ impl NotebookLMClient {
                 .unwrap_or("source")
                 .to_string();
 
-            let content = tokio::fs::read_to_string(&path).await
+            let content = tokio::fs::read_to_string(&path)
+                .await
                 .with_context(|| format!("Failed to read {}", path.display()))?;
 
             print!("  uploading {title:<55}");
             use std::io::Write as _;
             std::io::stdout().flush().ok();
 
-            let src_id = self.add_text_source(notebook_id, &title, &content).await
+            let src_id = self
+                .add_text_source(notebook_id, &title, &content)
+                .await
                 .with_context(|| format!("Failed to add source '{title}'"))?;
 
             println!("✓");
@@ -253,10 +279,22 @@ impl NotebookLMClient {
             [2],
             notebook_id,
             [
-                null, null,
+                null,
+                null,
                 ARTIFACT_SLIDE_DECK,
                 src_triple,
-                null, null, null, null, null, null, null, null, null, null, null, null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 [[instructions, language, null, null]]
             ]
         ]);
@@ -264,7 +302,8 @@ impl NotebookLMClient {
         let result = self.rpc(CREATE_ARTIFACT, &params, &source_path).await?;
 
         // result[0][0] = artifact_id
-        let artifact_id = result[0][0].as_str()
+        let artifact_id = result[0][0]
+            .as_str()
             .context("CREATE_ARTIFACT: missing artifact ID at result[0][0]")?
             .to_string();
         Ok(artifact_id)
@@ -285,16 +324,13 @@ impl NotebookLMClient {
         prompt: &str,
     ) -> Result<String> {
         let source_path = format!("/notebook/{notebook_id}");
-        let params = json!([
-            [2],
-            artifact_id,
-            [[[slide_index, prompt]]]
-        ]);
+        let params = json!([[2], artifact_id, [[[slide_index, prompt]]]]);
 
         let result = self.rpc(REVISE_SLIDE, &params, &source_path).await?;
 
         // result[0][0] = artifact_id (same structure as CREATE_ARTIFACT)
-        let revised_id = result[0][0].as_str()
+        let revised_id = result[0][0]
+            .as_str()
             .context("REVISE_SLIDE: missing artifact ID at result[0][0]")?
             .to_string();
         Ok(revised_id)
@@ -330,11 +366,7 @@ impl NotebookLMClient {
 
     /// Poll artifact status until COMPLETED or FAILED.
     /// Returns the full artifact JSON array.
-    pub async fn wait_for_artifact(
-        &self,
-        notebook_id: &str,
-        artifact_id: &str,
-    ) -> Result<Value> {
+    pub async fn wait_for_artifact(&self, notebook_id: &str, artifact_id: &str) -> Result<Value> {
         for attempt in 0..200 {
             let artifacts = self.list_artifacts_raw(notebook_id).await?;
 
@@ -371,12 +403,12 @@ impl NotebookLMClient {
     /// (correct security behaviour). We must use reqwest's built-in cookie Jar so that
     /// cookies are sent per-domain on every hop — identical to Python's httpx.Cookies.
     pub async fn download_slide_deck(&self, artifact: &Value, dest: &Path) -> Result<()> {
-        let pdf_url = artifact[16][3].as_str()
+        let pdf_url = artifact[16][3]
+            .as_str()
             .context("artifact[16][3] (PDF URL) is missing — slide deck may not be ready")?;
 
         // Build a cookie-jar client that forwards cookies on redirects.
-        let jar = build_cookie_jar(None)
-            .context("Failed to build cookie jar for download")?;
+        let jar = build_cookie_jar(None).context("Failed to build cookie jar for download")?;
 
         let download_client = reqwest::Client::builder()
             .cookie_provider(Arc::new(jar))
@@ -385,10 +417,12 @@ impl NotebookLMClient {
 
         let bytes = download_client
             .get(pdf_url)
-            .header(reqwest::header::USER_AGENT,
+            .header(
+                reqwest::header::USER_AGENT,
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
                  AppleWebKit/537.36 (KHTML, like Gecko) \
-                 Chrome/120.0.0.0 Safari/537.36")
+                 Chrome/120.0.0.0 Safari/537.36",
+            )
             .send()
             .await
             .context("Failed to download slide deck PDF")?
@@ -398,7 +432,8 @@ impl NotebookLMClient {
             .await
             .context("Failed to read PDF bytes")?;
 
-        tokio::fs::write(dest, &bytes).await
+        tokio::fs::write(dest, &bytes)
+            .await
             .with_context(|| format!("Failed to write PDF to {}", dest.display()))?;
 
         Ok(())

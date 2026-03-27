@@ -15,9 +15,9 @@ use std::path::Path;
 
 use crate::adapters;
 use crate::cli::{ArtifactType, Cli, Command};
-use crate::config::{load_config, list_projects};
-use crate::notebooklm::{load_tokens, NotebookLMClient};
+use crate::config::{list_projects, load_config};
 use crate::notebooklm::rpc::{ARTIFACT_SLIDE_DECK, STATUS_COMPLETED};
+use crate::notebooklm::{load_tokens, NotebookLMClient};
 
 // ── Dispatcher ────────────────────────────────────────────────────────────────
 
@@ -33,7 +33,11 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
             let sources = cfg.sources.unwrap_or_default();
             let md_dir = dirs.output_dir.join("markdown");
 
-            println!("\n── Sync  ({} source(s)) {}", sources.len(), "─".repeat(38));
+            println!(
+                "\n── Sync  ({} source(s)) {}",
+                sources.len(),
+                "─".repeat(38)
+            );
             adapters::sync_all_sources(&sources, &md_dir).await?;
 
             println!("\n  Output : {}", md_dir.display());
@@ -50,9 +54,11 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
 
         Command::List { debug } => cmd_list(debug).await,
 
-        Command::Upload { project, notebook_id, dirs } => {
-            cmd_upload(project.as_deref(), notebook_id.as_deref(), &dirs).await
-        }
+        Command::Upload {
+            project,
+            notebook_id,
+            dirs,
+        } => cmd_upload(project.as_deref(), notebook_id.as_deref(), &dirs).await,
 
         Command::Generate {
             project,
@@ -71,9 +77,11 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
             .await
         }
 
-        Command::Fetch { notebook_id, project, dirs } => {
-            cmd_fetch(&notebook_id, project.as_deref(), &dirs).await
-        }
+        Command::Fetch {
+            notebook_id,
+            project,
+            dirs,
+        } => cmd_fetch(&notebook_id, project.as_deref(), &dirs).await,
 
         Command::Run {
             project,
@@ -134,7 +142,6 @@ async fn make_client_with_debug(debug: bool) -> Result<NotebookLMClient> {
     client.debug = debug;
     Ok(client)
 }
-
 
 // ── login ─────────────────────────────────────────────────────────────────────
 
@@ -258,7 +265,11 @@ async fn cmd_generate(
     use std::io::Write as _;
     std::io::stdout().flush().ok();
 
-    let instr = if instructions.is_empty() { None } else { Some(instructions) };
+    let instr = if instructions.is_empty() {
+        None
+    } else {
+        Some(instructions)
+    };
     let artifact_id = client
         .generate_slide_deck(notebook_id, &[], instr, lang)
         .await?;
@@ -312,8 +323,7 @@ async fn cmd_correct(
     // ── Step 1: find the most recent completed slide deck ─────────────────
     let artifacts = client.list_artifacts_raw(notebook_id).await?;
     let slide_art = artifacts.iter().find(|a| {
-        a[2].as_i64() == Some(ARTIFACT_SLIDE_DECK)
-            && a[4].as_i64() == Some(STATUS_COMPLETED)
+        a[2].as_i64() == Some(ARTIFACT_SLIDE_DECK) && a[4].as_i64() == Some(STATUS_COMPLETED)
     });
 
     let Some(existing) = slide_art else {
@@ -323,7 +333,8 @@ async fn cmd_correct(
         );
     };
 
-    let artifact_id = existing[0].as_str()
+    let artifact_id = existing[0]
+        .as_str()
         .context("Existing slide deck: artifact ID is not a string")?
         .to_string();
 
@@ -375,8 +386,7 @@ async fn cmd_fetch(
 
     // Find the most recent completed slide deck.
     let slide_art = artifacts.iter().find(|a| {
-        a[2].as_i64() == Some(ARTIFACT_SLIDE_DECK)
-            && a[4].as_i64() == Some(STATUS_COMPLETED)
+        a[2].as_i64() == Some(ARTIFACT_SLIDE_DECK) && a[4].as_i64() == Some(STATUS_COMPLETED)
     });
 
     let Some(art) = slide_art else {
@@ -414,7 +424,11 @@ async fn cmd_run(
     // ── Step 1: sync sources → markdown ─────────────────────────────────
     let sources = cfg.sources.clone().unwrap_or_default();
     if !sources.is_empty() {
-        println!("\n── Sync  ({} source(s)) {}", sources.len(), "─".repeat(38));
+        println!(
+            "\n── Sync  ({} source(s)) {}",
+            sources.len(),
+            "─".repeat(38)
+        );
         adapters::sync_all_sources(&sources, &md_dir).await?;
     }
 
@@ -449,10 +463,12 @@ async fn cmd_run(
     use std::io::Write as _;
     std::io::stdout().flush().ok();
 
-    let instr = if instructions.is_empty() { None } else { Some(instructions) };
-    let artifact_id = client
-        .generate_slide_deck(&nb_id, &[], instr, lang)
-        .await?;
+    let instr = if instructions.is_empty() {
+        None
+    } else {
+        Some(instructions)
+    };
+    let artifact_id = client.generate_slide_deck(&nb_id, &[], instr, lang).await?;
 
     println!(" queued ({artifact_id})");
     print!("  Waiting for completion…");
