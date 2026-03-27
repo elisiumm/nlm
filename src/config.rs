@@ -23,6 +23,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[allow(dead_code)]
 pub struct NotebookConfig {
     pub name: Option<String>,
     pub language: Option<String>,
@@ -30,6 +31,7 @@ pub struct NotebookConfig {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[allow(dead_code)]
 pub struct GenerateConfig {
     pub timeout: Option<u64>,
     pub slide_deck: Option<ArtifactInstructions>,
@@ -54,6 +56,7 @@ pub struct ArtifactInstructions {
 // This mirrors Python's duck-typed dict dispatch but with compile-time guarantees.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(dead_code)]
 pub enum Source {
     Confluence {
         id: String,

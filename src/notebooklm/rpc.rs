@@ -37,19 +37,19 @@ use serde_json::Value;
 pub const LIST_NOTEBOOKS:   &str = "wXbhsf";
 pub const CREATE_NOTEBOOK:  &str = "CCqFvf";
 pub const GET_NOTEBOOK:     &str = "rLM1Ne";
-pub const DELETE_NOTEBOOK:  &str = "pXA4Ob";
-pub const RENAME_NOTEBOOK:  &str = "nFMHOc";
+#[allow(dead_code)] pub const DELETE_NOTEBOOK:  &str = "pXA4Ob";
+#[allow(dead_code)] pub const RENAME_NOTEBOOK:  &str = "nFMHOc";
 
 pub const ADD_SOURCE:       &str = "izAoDd";
 pub const DELETE_SOURCE:    &str = "tGMBJ";
-pub const LIST_SOURCES:     &str = "Yl5oTb";
+#[allow(dead_code)] pub const LIST_SOURCES:     &str = "Yl5oTb";
 
 pub const CREATE_ARTIFACT:  &str = "R7cb6c";
 pub const LIST_ARTIFACTS:   &str = "gArtLc";
 
 // Artifact type codes (from rpc/types.py ArtifactTypeCode)
-pub const ARTIFACT_AUDIO:      i64 = 1;
-pub const ARTIFACT_REPORT:     i64 = 2;
+#[allow(dead_code)] pub const ARTIFACT_AUDIO:      i64 = 1;
+#[allow(dead_code)] pub const ARTIFACT_REPORT:     i64 = 2;
 pub const ARTIFACT_SLIDE_DECK: i64 = 8;
 
 // Artifact / source status (3 = COMPLETED / READY, 4 = FAILED)

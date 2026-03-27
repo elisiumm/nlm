@@ -13,7 +13,6 @@
 
 use anyhow::{Context, Result};
 use regex::Regex;
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// All session material needed for every RPC call.
