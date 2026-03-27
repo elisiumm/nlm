@@ -1,0 +1,43 @@
+[package]
+name = "nlm"
+version = "0.1.0"
+edition = "2021"
+description = "NotebookLM toolkit — sync sources, upload, and generate AI artifacts"
+
+[[bin]]
+name = "nlm"
+path = "src/main.rs"
+
+[dependencies]
+# CLI argument parsing — derive macros generate the parser from structs/enums
+clap = { version = "~4.5", features = ["derive"] }
+
+# Serialization/deserialization — "derive" enables #[derive(Serialize, Deserialize)]
+serde = { version = "1", features = ["derive"] }
+
+# YAML support for serde
+serde_yaml = "0.9"
+
+# JSON support — used to parse Confluence REST API responses
+serde_json = "1"
+
+# Ergonomic error handling — anyhow::Result<T> + ? operator + .context()
+anyhow = "1"
+
+# Async runtime — #[tokio::main] + tokio::fs, tokio::spawn, etc.
+tokio = { version = "1", features = ["full"] }
+
+# Async HTTP client — reqwest::Client::get(), .basic_auth(), .json(), etc.
+reqwest = { version = "0.12", features = ["json", "cookies"] }
+
+# HTML → Markdown conversion — mirrors Python's html2text
+htmd = "0.1"
+
+# .env file loader — mirrors Python's python-dotenv
+dotenvy = "0.15"
+
+# Regex — extract SNlM0e/FdrFJe CSRF tokens from NotebookLM HTML
+regex = "1"
+
+# URL percent-encoding — f.req= body needs to be url-encoded
+urlencoding = "2"

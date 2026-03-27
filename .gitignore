@@ -1,0 +1,6 @@
+/target
+.env
+*.env
+output/
+config/projects/*.yaml
+config/notebook.yaml
