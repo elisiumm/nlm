@@ -53,6 +53,6 @@ jobs:
         run: shasum -a 256 ${{ env.ARCHIVE }} > ${{ env.ARCHIVE }}.sha256
 
       - name: Upload to release
-        run: gh release upload ${{ github.ref_name }} ${{ env.ARCHIVE }} ${{ env.ARCHIVE }}.sha256
+        run: gh release upload --clobber ${{ github.ref_name }} ${{ env.ARCHIVE }} ${{ env.ARCHIVE }}.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
