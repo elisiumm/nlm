@@ -54,7 +54,6 @@ pub const REVISE_SLIDE: &str = "KmcKPe"; // Targeted single-slide revision
 // Artifact type codes (from rpc/types.py ArtifactTypeCode)
 #[allow(dead_code)]
 pub const ARTIFACT_AUDIO: i64 = 1;
-#[allow(dead_code)]
 pub const ARTIFACT_REPORT: i64 = 2;
 pub const ARTIFACT_SLIDE_DECK: i64 = 8;
 

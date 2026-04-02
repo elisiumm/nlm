@@ -36,7 +36,7 @@ pub struct DirArgs {
 
 // ValueEnum generates clap parsing + --help display from enum variants.
 // #[value(name = "...")] customises the string accepted on the CLI.
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, PartialEq, ValueEnum)]
 pub enum ArtifactType {
     #[value(name = "slide-deck")]
     SlideDeck,
@@ -45,6 +45,19 @@ pub enum ArtifactType {
     #[value(name = "briefing-doc")]
     BriefingDoc,
     Audio,
+}
+
+impl ArtifactType {
+    /// Parse from config string (e.g. "study-guide").
+    pub fn from_config(s: &str) -> Option<Self> {
+        match s {
+            "slide-deck" => Some(Self::SlideDeck),
+            "study-guide" => Some(Self::StudyGuide),
+            "briefing-doc" => Some(Self::BriefingDoc),
+            "audio" => Some(Self::Audio),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for ArtifactType {
