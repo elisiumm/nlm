@@ -204,8 +204,7 @@ impl NotebookLMClient {
 
         let result = self.rpc(ADD_SOURCE, &params, &source_path).await?;
 
-        // Response: [[[["source_id"], title, metadata, ...]]]
-        // Source ID is at result[0][0][0][0]
+        // Response: deeply nested array; source ID is a string at result[0][0][0][0]
         let src_id = result[0][0][0][0]
             .as_str()
             .with_context(|| format!("ADD_SOURCE: missing source ID in response: {result}"))?
@@ -259,7 +258,7 @@ impl NotebookLMClient {
     ///
     /// Params validated from _artifacts.py generate_slide_deck():
     /// `[[2], notebook_id, [null, null, 8, source_ids_triple, null×12, [[instructions, language, null, null]]]]`
-    /// where source_ids_triple = `[[[sid]]]` for each sid.
+    /// where source_ids_triple = `[[[sid1]], [[sid2]], ...]` — each element is `[[sid]]`.
     pub async fn generate_slide_deck(
         &self,
         notebook_id: &str,
