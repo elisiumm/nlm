@@ -16,6 +16,7 @@ use std::path::Path;
 use crate::adapters;
 use crate::cli::{ArtifactType, Cli, Command};
 use crate::config::{list_projects, load_config};
+use crate::notebooklm::rpc;
 use crate::notebooklm::rpc::{ARTIFACT_SLIDE_DECK, STATUS_COMPLETED};
 use crate::notebooklm::{load_tokens, NotebookLMClient};
 
@@ -443,6 +444,16 @@ async fn cmd_run(
     }
 
     // ── Step 2: upload to NotebookLM ─────────────────────────────────────
+    if skip_upload
+        && notebook_id.is_none()
+        && cfg
+            .notebook
+            .as_ref()
+            .and_then(|n| n.name.as_ref())
+            .is_none()
+    {
+        anyhow::bail!("--skip-upload requires --notebook-id or a notebook name in config");
+    }
     let client = make_client().await?;
     let nb_id = resolve_notebook_id(&client, notebook_id, &cfg).await?;
 
@@ -455,15 +466,20 @@ async fn cmd_run(
         client.upload_dir(&nb_id, &md_dir).await?
     } else {
         let sources = client.list_sources(&nb_id).await?;
-        sources
+        let ready: Vec<String> = sources
             .iter()
+            .filter(|src| src[3][1].as_i64() == Some(rpc::STATUS_COMPLETED))
             .filter_map(|src| {
                 src[0]
                     .as_str()
                     .or_else(|| src[0][0].as_str())
                     .map(|s| s.to_string())
             })
-            .collect()
+            .collect();
+        if ready.is_empty() {
+            anyhow::bail!("No ready sources found in notebook {nb_id}");
+        }
+        ready
     };
 
     // ── Step 3: generate artifact ────────────────────────────────────────
