@@ -412,7 +412,7 @@ async fn cmd_fetch(
 
 async fn cmd_run(
     project: Option<&str>,
-    _artifact_type: Option<ArtifactType>,
+    cli_artifact_type: Option<ArtifactType>,
     language: Option<&str>,
     notebook_id: Option<&str>,
     skip_upload: bool,
@@ -420,6 +420,16 @@ async fn cmd_run(
 ) -> Result<()> {
     let cfg = load_config(project, &dirs.config_dir)?;
     let md_dir = dirs.output_dir.join("markdown");
+
+    // ── Resolve artifact type: CLI flag > config default_artifact > slide-deck
+    let artifact_type = cli_artifact_type
+        .or_else(|| {
+            cfg.notebook
+                .as_ref()
+                .and_then(|n| n.default_artifact.as_deref())
+                .and_then(ArtifactType::from_config)
+        })
+        .unwrap_or(ArtifactType::SlideDeck);
 
     // ── Step 1: sync sources → markdown ─────────────────────────────────
     let sources = cfg.sources.clone().unwrap_or_default();
@@ -436,39 +446,118 @@ async fn cmd_run(
     let client = make_client().await?;
     let nb_id = resolve_notebook_id(&client, notebook_id, &cfg).await?;
 
-    if !skip_upload {
+    let source_ids = if !skip_upload {
         println!("\n── Upload  ({})", nb_dir_label(&md_dir));
         println!("  Notebook : {nb_id}");
         println!("  Clearing existing sources…");
         client.delete_all_sources(&nb_id).await?;
         println!("  Uploading markdown files…");
-        client.upload_dir(&nb_id, &md_dir).await?;
-    }
+        client.upload_dir(&nb_id, &md_dir).await?
+    } else {
+        let sources = client.list_sources(&nb_id).await?;
+        sources
+            .iter()
+            .filter_map(|src| {
+                src[0]
+                    .as_str()
+                    .or_else(|| src[0][0].as_str())
+                    .map(|s| s.to_string())
+            })
+            .collect()
+    };
 
-    // ── Step 3: generate slide deck ───────────────────────────────────────
+    // ── Step 3: generate artifact ────────────────────────────────────────
     let lang = language
         .or_else(|| cfg.notebook.as_ref().and_then(|n| n.language.as_deref()))
         .unwrap_or("fr");
 
-    let instructions = cfg
-        .generate
-        .as_ref()
-        .and_then(|g| g.slide_deck.as_ref())
-        .and_then(|sd| sd.instructions.as_deref())
-        .unwrap_or("");
-
-    println!("\n── Generate  (slide-deck, lang={lang})");
+    println!("\n── Generate  ({artifact_type}, lang={lang})");
 
     print!("  Generating…");
     use std::io::Write as _;
     std::io::stdout().flush().ok();
 
-    let instr = if instructions.is_empty() {
-        None
-    } else {
-        Some(instructions)
+    let artifact_id = match &artifact_type {
+        ArtifactType::SlideDeck => {
+            let instructions = cfg
+                .generate
+                .as_ref()
+                .and_then(|g| g.slide_deck.as_ref())
+                .and_then(|sd| sd.instructions.as_deref())
+                .unwrap_or("");
+            let instr = if instructions.is_empty() {
+                None
+            } else {
+                Some(instructions)
+            };
+            client
+                .generate_slide_deck(&nb_id, &source_ids, instr, lang)
+                .await?
+        }
+        ArtifactType::StudyGuide => {
+            let extra = cfg
+                .generate
+                .as_ref()
+                .and_then(|g| g.study_guide.as_ref())
+                .and_then(|sg| sg.instructions.as_deref())
+                .unwrap_or("");
+            let prompt = if extra.is_empty() {
+                "Create a comprehensive study guide that includes key concepts, \
+                 short-answer practice questions, essay prompts for deeper \
+                 exploration, and a glossary of important terms."
+                    .to_string()
+            } else {
+                format!(
+                    "Create a comprehensive study guide that includes key concepts, \
+                     short-answer practice questions, essay prompts for deeper \
+                     exploration, and a glossary of important terms.\n\n{extra}"
+                )
+            };
+            client
+                .generate_report(
+                    &nb_id,
+                    &source_ids,
+                    "Study Guide",
+                    "Short-answer quiz, essay questions, glossary",
+                    &prompt,
+                    lang,
+                )
+                .await?
+        }
+        ArtifactType::BriefingDoc => {
+            let extra = cfg
+                .generate
+                .as_ref()
+                .and_then(|g| g.briefing_doc.as_ref())
+                .and_then(|bd| bd.instructions.as_deref())
+                .unwrap_or("");
+            let prompt = if extra.is_empty() {
+                "Create a comprehensive briefing document that includes an \
+                 Executive Summary, detailed analysis of key themes, important \
+                 quotes with context, and actionable insights."
+                    .to_string()
+            } else {
+                format!(
+                    "Create a comprehensive briefing document that includes an \
+                     Executive Summary, detailed analysis of key themes, important \
+                     quotes with context, and actionable insights.\n\n{extra}"
+                )
+            };
+            client
+                .generate_report(
+                    &nb_id,
+                    &source_ids,
+                    "Briefing Doc",
+                    "Key insights and important quotes",
+                    &prompt,
+                    lang,
+                )
+                .await?
+        }
+        ArtifactType::Audio => {
+            anyhow::bail!("Audio artifact generation is not yet implemented");
+        }
     };
-    let artifact_id = client.generate_slide_deck(&nb_id, &[], instr, lang).await?;
 
     println!(" queued ({artifact_id})");
     print!("  Waiting for completion…");
@@ -477,16 +566,29 @@ async fn cmd_run(
     let artifact = client.wait_for_artifact(&nb_id, &artifact_id).await?;
     println!(" done");
 
-    {
-        let out_dir = dirs.output_dir.join("slide-deck");
-        tokio::fs::create_dir_all(&out_dir).await?;
-        let label = project.unwrap_or(&nb_id);
-        let dest = out_dir.join(format!("{label}.pdf"));
+    // ── Step 4: download artifact ────────────────────────────────────────
+    let label = project.unwrap_or(&nb_id);
 
-        print!("  Downloading PDF…");
-        std::io::stdout().flush().ok();
-        client.download_slide_deck(&artifact, &dest).await?;
-        println!(" {}", dest.display());
+    match &artifact_type {
+        ArtifactType::SlideDeck => {
+            let out_dir = dirs.output_dir.join("slide-deck");
+            tokio::fs::create_dir_all(&out_dir).await?;
+            let dest = out_dir.join(format!("{label}.pdf"));
+            print!("  Downloading PDF…");
+            std::io::stdout().flush().ok();
+            client.download_slide_deck(&artifact, &dest).await?;
+            println!(" {}", dest.display());
+        }
+        ArtifactType::StudyGuide | ArtifactType::BriefingDoc => {
+            let dir_name = artifact_type.to_string();
+            let out_dir = dirs.output_dir.join(&dir_name);
+            tokio::fs::create_dir_all(&out_dir).await?;
+            let dest = out_dir.join(format!("{label}.md"));
+            let md = NotebookLMClient::extract_report_markdown(&artifact)?;
+            tokio::fs::write(&dest, &md).await?;
+            println!("  Saved {}", dest.display());
+        }
+        ArtifactType::Audio => unreachable!(),
     }
 
     Ok(())

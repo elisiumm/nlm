@@ -204,10 +204,11 @@ impl NotebookLMClient {
 
         let result = self.rpc(ADD_SOURCE, &params, &source_path).await?;
 
-        // result[0] = source_id string (from Source.from_api_response in Python)
-        let src_id = result[0]
+        // Response: [[[["source_id"], title, metadata, ...]]]
+        // Source ID is at result[0][0][0][0]
+        let src_id = result[0][0][0][0]
             .as_str()
-            .context("ADD_SOURCE: missing source ID in response")?
+            .with_context(|| format!("ADD_SOURCE: missing source ID in response: {result}"))?
             .to_string();
         Ok(src_id)
     }
@@ -268,10 +269,10 @@ impl NotebookLMClient {
     ) -> Result<String> {
         let source_path = format!("/notebook/{notebook_id}");
 
-        // source_ids_triple: each source is [[[sid]]]
+        // source_ids_triple: [[[sid1]], [[sid2]], ...] — each element is [[sid]]
         let src_triple: Value = source_ids
             .iter()
-            .map(|id| json!([[[id]]]))
+            .map(|id| json!([[id]]))
             .collect::<Vec<_>>()
             .into();
 
@@ -301,12 +302,92 @@ impl NotebookLMClient {
 
         let result = self.rpc(CREATE_ARTIFACT, &params, &source_path).await?;
 
-        // result[0][0] = artifact_id
         let artifact_id = result[0][0]
             .as_str()
-            .context("CREATE_ARTIFACT: missing artifact ID at result[0][0]")?
+            .or_else(|| result[0][0][0].as_str())
+            .with_context(|| format!("CREATE_ARTIFACT: missing artifact ID in response: {result}"))?
             .to_string();
         Ok(artifact_id)
+    }
+
+    /// Generate a report artifact (study-guide, briefing-doc). Returns the artifact ID.
+    ///
+    /// Params structure from _artifacts.py generate_report():
+    /// `[[2], notebook_id, [null, null, 2, source_ids_triple, null×3,
+    ///   [null, [title, description, null, source_ids_double, language, prompt, null, true]]]]`
+    pub async fn generate_report(
+        &self,
+        notebook_id: &str,
+        source_ids: &[String],
+        title: &str,
+        description: &str,
+        prompt: &str,
+        language: &str,
+    ) -> Result<String> {
+        let source_path = format!("/notebook/{notebook_id}");
+
+        let src_triple: Value = source_ids
+            .iter()
+            .map(|id| json!([[id]]))
+            .collect::<Vec<_>>()
+            .into();
+
+        let src_double: Value = source_ids
+            .iter()
+            .map(|id| json!([id]))
+            .collect::<Vec<_>>()
+            .into();
+
+        let params = json!([
+            [2],
+            notebook_id,
+            [
+                null,
+                null,
+                ARTIFACT_REPORT,
+                src_triple,
+                null,
+                null,
+                null,
+                [
+                    null,
+                    [
+                        title,
+                        description,
+                        null,
+                        src_double,
+                        language,
+                        prompt,
+                        null,
+                        true
+                    ]
+                ]
+            ]
+        ]);
+
+        let result = self.rpc(CREATE_ARTIFACT, &params, &source_path).await?;
+
+        let artifact_id = result[0][0]
+            .as_str()
+            .or_else(|| result[0][0][0].as_str())
+            .with_context(|| {
+                format!("CREATE_ARTIFACT (report): missing artifact ID in response: {result}")
+            })?
+            .to_string();
+        Ok(artifact_id)
+    }
+
+    /// Download a completed report artifact as markdown.
+    /// Report content is at `artifact[7][0]` (or `artifact[7]` if already a string).
+    pub fn extract_report_markdown(artifact: &Value) -> Result<String> {
+        let content = &artifact[7];
+        if let Some(s) = content.as_str() {
+            return Ok(s.to_string());
+        }
+        if let Some(s) = content[0].as_str() {
+            return Ok(s.to_string());
+        }
+        anyhow::bail!("Report content not found at artifact[7]: {content}")
     }
 
     /// Revise a single slide in a completed slide deck. Returns the artifact ID for polling.
