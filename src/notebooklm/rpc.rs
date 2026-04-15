@@ -160,9 +160,8 @@ pub fn decode_response(body: &str, method_id: &str) -> Result<Value> {
                             format!("Failed to parse RPC result for {method_id}")
                         })?,
                         Value::Null => {
-                            let raw_item = serde_json::to_string(item).unwrap_or_else(|_| {
-                                "<unserializable item>".to_string()
-                            });
+                            let raw_item = serde_json::to_string(item)
+                                .unwrap_or_else(|_| "<unserializable item>".to_string());
                             anyhow::bail!(
                                 "RPC {method_id} returned null result (server rejected the call). \
                                  raw_item={raw_item} raw_body_head={head}",
