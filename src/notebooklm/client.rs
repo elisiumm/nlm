@@ -278,6 +278,7 @@ impl NotebookLMClient {
         let start_resp = self
             .http
             .post(&start_url)
+            .header(reqwest::header::ACCEPT, "*/*")
             .header(reqwest::header::COOKIE, &self.tokens.cookie_header)
             .header(
                 reqwest::header::CONTENT_TYPE,
@@ -311,7 +312,16 @@ impl NotebookLMClient {
         let upload_resp = self
             .http
             .post(&upload_url)
+            .header(reqwest::header::ACCEPT, "*/*")
             .header(reqwest::header::COOKIE, &self.tokens.cookie_header)
+            // Matches notebooklm-py::_upload_file_streaming. Without it,
+            // reqwest falls back to application/octet-stream, which some
+            // NotebookLM upload endpoints reject or silently ingest as the
+            // wrong source type.
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded;charset=utf-8",
+            )
             .header("Origin", "https://notebooklm.google.com")
             .header("Referer", "https://notebooklm.google.com/")
             .header("x-goog-authuser", "0")
