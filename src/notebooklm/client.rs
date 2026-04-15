@@ -212,41 +212,185 @@ impl NotebookLMClient {
         Ok(src_id)
     }
 
-    /// Upload all `.md` files from a directory as text sources.
-    pub async fn upload_dir(&self, notebook_id: &str, md_dir: &Path) -> Result<Vec<String>> {
-        let mut ids = Vec::new();
+    /// Add a binary file source (PDF, image, Word doc, plain text…) via the
+    /// Google resumable-upload protocol used by the NotebookLM web UI.
+    ///
+    /// Three steps, all validated against notebooklm-py `_sources.py::add_file`:
+    ///   1. RPC `ADD_SOURCE_FILE` with `[[[filename]], notebook_id, [2], [1, null×9, [1]]]`
+    ///      → returns a source ID (deeply nested string; we walk the first
+    ///      element of every array until we find one).
+    ///   2. POST to `UPLOAD_URL?authuser=0` with JSON body
+    ///      `{"PROJECT_ID": notebook_id, "SOURCE_NAME": filename, "SOURCE_ID": source_id}`
+    ///      and `x-goog-upload-command: start` header → response carries the
+    ///      real upload URL in `x-goog-upload-url`.
+    ///   3. POST file bytes to that URL with `x-goog-upload-command: upload, finalize`
+    ///      and `x-goog-upload-offset: 0` → NotebookLM ingests the file.
+    ///
+    /// NotebookLM officially supports PDF / plain text / markdown / Word. Raw
+    /// images (PNG/JPEG) are accepted by this flow but may be rejected server-
+    /// side during processing — the caller sees that as `STATUS_FAILED` on the
+    /// returned source later.
+    pub async fn add_file_source(&self, notebook_id: &str, file_path: &Path) -> Result<String> {
+        let filename = file_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .context("File path has no filename component")?
+            .to_string();
 
-        let mut entries = tokio::fs::read_dir(md_dir)
+        let bytes = tokio::fs::read(file_path)
             .await
-            .with_context(|| format!("Cannot read directory: {}", md_dir.display()))?;
+            .with_context(|| format!("Cannot read {}", file_path.display()))?;
 
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("md") {
-                continue;
+        // ── Step 1: register the source and get its id ───────────────────
+        let source_path = format!("/notebook/{notebook_id}");
+        let params = json!([
+            [[filename.clone()]],
+            notebook_id,
+            [2],
+            [1, null, null, null, null, null, null, null, null, null, [1]],
+        ]);
+        let result = self
+            .rpc(rpc::ADD_SOURCE_FILE, &params, &source_path)
+            .await?;
+
+        // Response shape varies: [[[[id]]]], [[[id]]], [[id]], etc. Walk the
+        // first element of each nested array until we hit a string.
+        fn extract_id(v: &Value) -> Option<String> {
+            match v {
+                Value::String(s) => Some(s.clone()),
+                Value::Array(a) if !a.is_empty() => extract_id(&a[0]),
+                _ => None,
             }
+        }
+        let source_id = extract_id(&result).with_context(|| {
+            format!("ADD_SOURCE_FILE: could not find source_id in response: {result}")
+        })?;
 
-            let title = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("source")
-                .to_string();
+        // ── Step 2: start the resumable session ──────────────────────────
+        let start_url = format!("{}?authuser=0", rpc::UPLOAD_URL);
+        let start_body = json!({
+            "PROJECT_ID": notebook_id,
+            "SOURCE_NAME": filename,
+            "SOURCE_ID": source_id,
+        })
+        .to_string();
 
-            let content = tokio::fs::read_to_string(&path)
+        let start_resp = self
+            .http
+            .post(&start_url)
+            .header(reqwest::header::COOKIE, &self.tokens.cookie_header)
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded;charset=UTF-8",
+            )
+            .header("Origin", "https://notebooklm.google.com")
+            .header("Referer", "https://notebooklm.google.com/")
+            .header("x-goog-authuser", "0")
+            .header("x-goog-upload-command", "start")
+            .header(
+                "x-goog-upload-header-content-length",
+                bytes.len().to_string(),
+            )
+            .header("x-goog-upload-protocol", "resumable")
+            .body(start_body)
+            .send()
+            .await
+            .with_context(|| format!("Failed to start upload for {filename}"))?;
+        start_resp
+            .error_for_status_ref()
+            .with_context(|| format!("Upload-start HTTP error for {filename}"))?;
+
+        let upload_url = start_resp
+            .headers()
+            .get("x-goog-upload-url")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string())
+            .context("Upload-start response missing x-goog-upload-url header")?;
+
+        // ── Step 3: upload the bytes ─────────────────────────────────────
+        let upload_resp = self
+            .http
+            .post(&upload_url)
+            .header(reqwest::header::COOKIE, &self.tokens.cookie_header)
+            .header("Origin", "https://notebooklm.google.com")
+            .header("Referer", "https://notebooklm.google.com/")
+            .header("x-goog-authuser", "0")
+            .header("x-goog-upload-command", "upload, finalize")
+            .header("x-goog-upload-offset", "0")
+            .body(bytes)
+            .send()
+            .await
+            .with_context(|| format!("Failed to upload bytes for {filename}"))?;
+        upload_resp
+            .error_for_status_ref()
+            .with_context(|| format!("Upload-finalize HTTP error for {filename}"))?;
+
+        Ok(source_id)
+    }
+
+    /// Upload every file under `root`:
+    ///   - `.md` files go through `add_text_source` (same as before).
+    ///   - Other files (png, jpg, pdf, txt, docx…) go through `add_file_source`
+    ///     (resumable binary upload).
+    ///
+    /// Recurses one level so `<root>/assets/imageN.png` produced by
+    /// `nlm import` is picked up alongside `<root>/charter.md`.
+    pub async fn upload_dir(&self, notebook_id: &str, root: &Path) -> Result<Vec<String>> {
+        let mut ids = Vec::new();
+        let mut stack: Vec<std::path::PathBuf> = vec![root.to_path_buf()];
+
+        while let Some(dir) = stack.pop() {
+            let mut entries = tokio::fs::read_dir(&dir)
                 .await
-                .with_context(|| format!("Failed to read {}", path.display()))?;
+                .with_context(|| format!("Cannot read directory: {}", dir.display()))?;
 
-            print!("  uploading {title:<55}");
-            use std::io::Write as _;
-            std::io::stdout().flush().ok();
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                let ft = entry.file_type().await?;
+                if ft.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if !ft.is_file() {
+                    continue;
+                }
 
-            let src_id = self
-                .add_text_source(notebook_id, &title, &content)
-                .await
-                .with_context(|| format!("Failed to add source '{title}'"))?;
+                let label = path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("source")
+                    .to_string();
 
-            println!("✓");
-            ids.push(src_id);
+                print!("  uploading {label:<55}");
+                use std::io::Write as _;
+                std::io::stdout().flush().ok();
+
+                let is_md = path.extension().and_then(|e| e.to_str()) == Some("md");
+
+                let src_id = if is_md {
+                    let title = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("source")
+                        .to_string();
+                    let content = tokio::fs::read_to_string(&path)
+                        .await
+                        .with_context(|| format!("Failed to read {}", path.display()))?;
+                    self.add_text_source(notebook_id, &title, &content).await
+                } else {
+                    self.add_file_source(notebook_id, &path).await
+                };
+
+                match src_id {
+                    Ok(id) => {
+                        println!("✓");
+                        ids.push(id);
+                    }
+                    Err(e) => {
+                        println!("✗  {e}");
+                    }
+                }
+            }
         }
 
         Ok(ids)
