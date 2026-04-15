@@ -67,6 +67,7 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
             artifact_type,
             language,
             notebook_id,
+            debug,
             dirs,
         } => {
             cmd_generate(
@@ -74,6 +75,7 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
                 artifact_type,
                 language.as_deref(),
                 &notebook_id,
+                debug,
                 &dirs,
             )
             .await
@@ -82,8 +84,9 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
         Command::Fetch {
             notebook_id,
             project,
+            debug,
             dirs,
-        } => cmd_fetch(&notebook_id, project.as_deref(), &dirs).await,
+        } => cmd_fetch(&notebook_id, project.as_deref(), debug, &dirs).await,
 
         Command::Run {
             project,
@@ -119,6 +122,7 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
             notebook_id,
             project,
             language,
+            debug,
             dirs,
         } => {
             cmd_correct(
@@ -127,6 +131,7 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
                 &notebook_id,
                 slide,
                 &prompt,
+                debug,
                 &dirs,
             )
             .await
@@ -135,10 +140,6 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
 }
 
 // ── Helper: build a NotebookLMClient from saved session tokens ────────────────
-
-async fn make_client() -> Result<NotebookLMClient> {
-    make_client_with_debug(false).await
-}
 
 async fn make_client_with_debug(debug: bool) -> Result<NotebookLMClient> {
     let tokens = load_tokens(None).await?;
@@ -245,6 +246,7 @@ async fn cmd_generate(
     _artifact_type: Option<ArtifactType>,
     language: Option<&str>,
     notebook_id: &str,
+    debug: bool,
     dirs: &crate::cli::DirArgs,
 ) -> Result<()> {
     let cfg = load_config(project, &dirs.config_dir)?;
@@ -260,7 +262,7 @@ async fn cmd_generate(
         .and_then(|sd| sd.instructions.as_deref())
         .unwrap_or("");
 
-    let client = make_client().await?;
+    let client = make_client_with_debug(debug).await?;
 
     println!("\n── Generate");
     println!("  Notebook : {notebook_id}");
@@ -316,9 +318,10 @@ async fn cmd_correct(
     notebook_id: &str,
     slide: u32,
     prompt: &str,
+    debug: bool,
     dirs: &crate::cli::DirArgs,
 ) -> Result<()> {
-    let client = make_client().await?;
+    let client = make_client_with_debug(debug).await?;
 
     println!("\n── Correct  (notebook: {notebook_id})");
     println!("  Notebook : {notebook_id}");
@@ -381,9 +384,10 @@ async fn cmd_correct(
 async fn cmd_fetch(
     notebook_id: &str,
     project: Option<&str>,
+    debug: bool,
     dirs: &crate::cli::DirArgs,
 ) -> Result<()> {
-    let client = make_client().await?;
+    let client = make_client_with_debug(debug).await?;
 
     println!("\n── Fetch  (notebook: {notebook_id})");
 
