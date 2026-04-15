@@ -268,6 +268,28 @@ async fn cmd_generate(
     println!("  Notebook : {notebook_id}");
     println!("  Language : {lang}");
 
+    // CREATE_ARTIFACT is rejected by batchexecute (error code 4) when no source
+    // IDs are passed, so we mirror the `run --skip-upload` path: list notebook
+    // sources, keep only the ones in STATUS_COMPLETED, pass those IDs through.
+    let sources = client.list_sources(notebook_id).await?;
+    let source_ids: Vec<String> = sources
+        .iter()
+        .filter(|src| src[3][1].as_i64() == Some(rpc::STATUS_COMPLETED))
+        .filter_map(|src| {
+            src[0]
+                .as_str()
+                .or_else(|| src[0][0].as_str())
+                .map(|s| s.to_string())
+        })
+        .collect();
+    if source_ids.is_empty() {
+        anyhow::bail!(
+            "No ready sources found in notebook {notebook_id}. \
+             Run: nlm upload --notebook-id {notebook_id}"
+        );
+    }
+    println!("  Sources  : {}", source_ids.len());
+
     print!("  Generating…");
     use std::io::Write as _;
     std::io::stdout().flush().ok();
@@ -278,7 +300,7 @@ async fn cmd_generate(
         Some(instructions)
     };
     let artifact_id = client
-        .generate_slide_deck(notebook_id, &[], instr, lang)
+        .generate_slide_deck(notebook_id, &source_ids, instr, lang)
         .await?;
 
     println!(" queued ({artifact_id})");
