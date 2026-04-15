@@ -8,6 +8,7 @@
 
 pub mod confluence;
 pub mod file;
+pub mod notion;
 pub mod url;
 
 use anyhow::Result;
@@ -63,11 +64,7 @@ pub async fn sync_all_sources(sources: &[Source], output_dir: &Path) -> Result<(
                     .fetch(source, output_dir)
                     .await
             }
-            // Notion requires MCP + OAuth — deferred to Phase 3
-            Source::Notion { .. } => {
-                println!("skipped  (Notion — Phase 3)");
-                continue;
-            }
+            Source::Notion { .. } => notion::NotionAdapter.fetch(source, output_dir).await,
             // PPTX requires ZIP + XML parsing — deferred to Phase 4
             Source::Pptx { .. } => {
                 println!("skipped  (PPTX — Phase 4)");

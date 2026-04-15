@@ -105,6 +105,11 @@ NLM_COOKIES=<your-google-auth-cookies>
 CONFLUENCE_BASE_URL=https://yourcompany.atlassian.net
 CONFLUENCE_USERNAME=your@email.com
 CONFLUENCE_API_TOKEN=your-api-token
+
+# Notion adapter (required if using Notion sources)
+# Create an integration at https://www.notion.so/my-integrations,
+# copy the secret, and share the target page(s) with the integration.
+NOTION_TOKEN=secret_...
 ```
 
 ### Global config (`config/notebook.yaml`)
