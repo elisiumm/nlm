@@ -4,3 +4,4 @@
 output/
 config/projects/*.yaml
 config/notebook.yaml
+.claude/
