@@ -58,8 +58,9 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
         Command::Upload {
             project,
             notebook_id,
+            debug,
             dirs,
-        } => cmd_upload(project.as_deref(), notebook_id.as_deref(), &dirs).await,
+        } => cmd_upload(project.as_deref(), notebook_id.as_deref(), debug, &dirs).await,
 
         Command::Generate {
             project,
@@ -90,6 +91,7 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
             language,
             notebook_id,
             skip_upload,
+            debug,
             dirs,
         } => {
             cmd_run(
@@ -98,6 +100,7 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
                 language.as_deref(),
                 notebook_id.as_deref(),
                 skip_upload,
+                debug,
                 &dirs,
             )
             .await
@@ -211,12 +214,13 @@ async fn cmd_list(debug: bool) -> Result<()> {
 async fn cmd_upload(
     project: Option<&str>,
     notebook_id: Option<&str>,
+    debug: bool,
     dirs: &crate::cli::DirArgs,
 ) -> Result<()> {
     let cfg = load_config(project, &dirs.config_dir)?;
     let md_dir = dirs.output_dir.join("markdown");
 
-    let client = make_client().await?;
+    let client = make_client_with_debug(debug).await?;
 
     // Resolve notebook: --notebook-id > config > find-or-create by project name
     let nb_id = resolve_notebook_id(&client, notebook_id, &cfg).await?;
@@ -417,6 +421,7 @@ async fn cmd_run(
     language: Option<&str>,
     notebook_id: Option<&str>,
     skip_upload: bool,
+    debug: bool,
     dirs: &crate::cli::DirArgs,
 ) -> Result<()> {
     let cfg = load_config(project, &dirs.config_dir)?;
@@ -454,7 +459,7 @@ async fn cmd_run(
     {
         anyhow::bail!("--skip-upload requires --notebook-id or a notebook name in config");
     }
-    let client = make_client().await?;
+    let client = make_client_with_debug(debug).await?;
     let nb_id = resolve_notebook_id(&client, notebook_id, &cfg).await?;
 
     let source_ids = if !skip_upload {

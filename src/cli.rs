@@ -113,6 +113,10 @@ pub enum Command {
         #[arg(long, value_name = "ID")]
         notebook_id: Option<String>,
 
+        /// Print raw RPC response bodies to stderr for debugging
+        #[arg(long)]
+        debug: bool,
+
         #[command(flatten)]
         dirs: DirArgs,
     },
@@ -168,6 +172,10 @@ pub enum Command {
         /// Skip upload and reuse existing notebook (requires --notebook-id)
         #[arg(long)]
         skip_upload: bool,
+
+        /// Print raw RPC response bodies to stderr for debugging
+        #[arg(long)]
+        debug: bool,
 
         #[command(flatten)]
         dirs: DirArgs,
