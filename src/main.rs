@@ -3,6 +3,7 @@ mod cli;
 mod commands;
 mod config;
 mod notebooklm;
+mod pptx;
 
 use anyhow::Result;
 use clap::Parser;

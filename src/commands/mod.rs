@@ -109,11 +109,11 @@ pub async fn dispatch(cli: Cli) -> Result<()> {
             .await
         }
 
-        // ── Stubbed — Phase 4 (PPTX parsing) ──────────────────────────────
-        Command::Import { pptx, .. } => {
-            println!("import {} [Phase 4 — PPTX parsing]", pptx.display());
-            Ok(())
-        }
+        Command::Import {
+            pptx,
+            output,
+            dry_run,
+        } => cmd_import(&pptx, &output, dry_run).await,
 
         // `correct` is a specialised generate — Phase 3b
         Command::Correct {
@@ -183,6 +183,41 @@ async fn cmd_login() -> Result<()> {
         }
         Err(e) => Err(e.into()),
     }
+}
+
+// ── import ────────────────────────────────────────────────────────────────────
+
+async fn cmd_import(pptx: &Path, output: &Path, dry_run: bool) -> Result<()> {
+    println!("\n── Import  ({})", pptx.display());
+
+    // Heavy parsing is sync I/O on a local file — no point spawning blocking,
+    // the user-perceived latency is dominated by zip decompression which the
+    // tokio runtime can't speed up.
+    let (charter, md_path) = crate::pptx::import_pptx(pptx, output, dry_run)?;
+
+    println!(
+        "  Theme    : {}",
+        charter.theme_name.as_deref().unwrap_or("(none)")
+    );
+    println!(
+        "  Fonts    : {} / {}",
+        charter.major_font.as_deref().unwrap_or("(none)"),
+        charter.minor_font.as_deref().unwrap_or("(none)"),
+    );
+    println!("  Colors   : {}", charter.colors.len());
+    println!("  Layouts  : {}", charter.layouts.len());
+    println!("  Slides   : {}", charter.slides.len());
+    println!("  Assets   : {}", charter.assets.len());
+
+    match (dry_run, md_path) {
+        (true, _) => println!("  Mode     : dry-run (nothing written)"),
+        (false, Some(p)) => {
+            println!("  Output   : {}", p.display());
+            println!("  Next     : nlm sync -p <project>  (after adding the .md as a file source)");
+        }
+        (false, None) => unreachable!("non-dry-run always returns a markdown path"),
+    }
+    Ok(())
 }
 
 // ── list ──────────────────────────────────────────────────────────────────────

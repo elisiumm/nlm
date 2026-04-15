@@ -41,3 +41,9 @@ regex = "1"
 
 # URL percent-encoding — f.req= body needs to be url-encoded
 urlencoding = "2"
+
+# ZIP archive reader — .pptx is a ZIP container holding XML + media
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# Streaming XML pull-parser — used to walk OOXML without a full DOM
+quick-xml = "0.36"
