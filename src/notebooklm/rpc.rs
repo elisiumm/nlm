@@ -43,9 +43,15 @@ pub const DELETE_NOTEBOOK: &str = "pXA4Ob";
 pub const RENAME_NOTEBOOK: &str = "nFMHOc";
 
 pub const ADD_SOURCE: &str = "izAoDd";
+pub const ADD_SOURCE_FILE: &str = "o4cbdc"; // Register a file source, returns source_id
 pub const DELETE_SOURCE: &str = "tGMBJ";
 #[allow(dead_code)]
 pub const LIST_SOURCES: &str = "Yl5oTb";
+
+/// Google resumable upload endpoint — used by ADD_SOURCE_FILE flow.
+/// Step 1 registers intent via RPC, step 2 POSTs here for an upload URL,
+/// step 3 PUTs the bytes to that URL.
+pub const UPLOAD_URL: &str = "https://notebooklm.google.com/upload/_/";
 
 pub const CREATE_ARTIFACT: &str = "R7cb6c";
 pub const LIST_ARTIFACTS: &str = "gArtLc";
