@@ -149,14 +149,26 @@ pub fn decode_response(body: &str, method_id: &str) -> Result<Value> {
                 // item = ["wrb.fr", method_id, result_json_string, ...]
                 if item[0].as_str() == Some("wrb.fr") && item[1].as_str() == Some(method_id) {
                     // item[2] is the result:
-                    //   - Usually a JSON *string* that we must parse again (double-encoded).
-                    //   - null when the operation returns no data (e.g. empty list).
-                    //   - Occasionally already a parsed Value in some responses.
+                    //   - JSON *string* when the call succeeded → parse it (double-encoded).
+                    //   - null when batchexecute REJECTED the call (e.g. rate limit, payload
+                    //     rejection); in that case the error code/message lives in later
+                    //     slots of the same item or in a sibling chunk. Surface the full
+                    //     item + a head of the raw body so callers see what really happened.
+                    //   - Already-parsed Value in rare edge cases.
                     let result = match &item[2] {
                         Value::String(s) => serde_json::from_str(s).with_context(|| {
                             format!("Failed to parse RPC result for {method_id}")
                         })?,
-                        Value::Null => Value::Null,
+                        Value::Null => {
+                            let raw_item = serde_json::to_string(item).unwrap_or_else(|_| {
+                                "<unserializable item>".to_string()
+                            });
+                            anyhow::bail!(
+                                "RPC {method_id} returned null result (server rejected the call). \
+                                 raw_item={raw_item} raw_body_head={head}",
+                                head = body_head(body, 2000)
+                            );
+                        }
                         other => other.clone(),
                     };
 
@@ -167,4 +179,12 @@ pub fn decode_response(body: &str, method_id: &str) -> Result<Value> {
     }
 
     anyhow::bail!("RPC response did not contain a result for method '{method_id}'")
+}
+
+/// Return the first `max_chars` characters of `body` (UTF-8 safe).
+///
+/// Used to attach a digestible head of the raw response body to error messages
+/// without dumping multi-MB payloads.
+fn body_head(body: &str, max_chars: usize) -> String {
+    body.chars().take(max_chars).collect()
 }
