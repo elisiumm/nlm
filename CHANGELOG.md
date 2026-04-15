@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.0](https://github.com/elisiumm/nlm/compare/v0.1.1...v0.2.0) (2026-04-15)
+
+
+### Features
+
+* **adapters:** implement Notion sync adapter (Phase 3) ([d297060](https://github.com/elisiumm/nlm/commit/d297060cc36a34ba0ab5d2d403454af9a1e25e1b))
+* **cli:** add --debug flag to generate, fetch, correct ([f5bf57e](https://github.com/elisiumm/nlm/commit/f5bf57e95f7c9d08e055562f0fb664af6fb6e683))
+* **pptx:** implement brand charter extraction (Phase 4) ([9284825](https://github.com/elisiumm/nlm/commit/9284825470cb3446fa11d9a112112c4cc8cbef31))
+* **upload:** upload binary sources (images, PDFs) via resumable protocol ([977f9d0](https://github.com/elisiumm/nlm/commit/977f9d059a89bee50101609187316140784e96e5))
+
+
+### Bug Fixes
+
+* **client:** resolve notebook id from correct response fields ([cda8da0](https://github.com/elisiumm/nlm/commit/cda8da00ec3cf40b8f242e2be26e708383996565))
+* **generate:** pass completed source IDs to CREATE_ARTIFACT ([b7479e1](https://github.com/elisiumm/nlm/commit/b7479e1e29b08498808a87ac7eddc1fc1da9fcbd))
+* **rpc:** surface batchexecute raw item on null result ([c62063b](https://github.com/elisiumm/nlm/commit/c62063b6694a5f36b9125b4142c2b9c64b5f5fc8))
+* **upload:** add Content-Type + Accept headers on resumable flow ([a519e8a](https://github.com/elisiumm/nlm/commit/a519e8a8fcb9db3ea9fcdcfb9a35d0338810640d))
+
 ## [0.1.1](https://github.com/elisiumm/nlm/compare/v0.1.0...v0.1.1) (2026-04-02)
 
 
