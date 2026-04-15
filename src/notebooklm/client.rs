@@ -105,18 +105,28 @@ impl NotebookLMClient {
     }
 
     /// Find a notebook by title, or create it if it doesn't exist.
-    /// Returns the notebook ID string.
+    /// Returns the notebook ID string (a UUID, NOT the title).
+    ///
+    /// Shape notes validated against real batchexecute responses:
+    ///
+    /// - LIST_NOTEBOOKS entry: `[[uuid], title, metadata…]` — so the ID lives
+    ///   at `nb[0][0]` and the title at `nb[1]`. Earlier code read `nb[0]` as
+    ///   the title, which never matched (it's an array), so we always fell
+    ///   through to CREATE even when the notebook existed.
+    /// - CREATE_NOTEBOOK result: `[title, null, uuid, …]` — the UUID is at
+    ///   `result[2]`, not `result[0]`. Earlier code returned the title as the
+    ///   notebook ID, which then caused every downstream RPC (e.g. GET_NOTEBOOK
+    ///   for delete_all_sources) to fail with INVALID_ARGUMENT.
     pub async fn find_or_create_notebook(&self, name: &str) -> Result<String> {
         let notebooks = self.list_notebooks().await?;
         let empty = vec![];
         let arr = notebooks.as_array().unwrap_or(&empty);
 
         for nb in arr {
-            // nb[0] = title, nb[2] = ID (UUID)
-            if nb[0].as_str() == Some(name) {
-                let id = nb[2]
+            if nb[1].as_str() == Some(name) {
+                let id = nb[0][0]
                     .as_str()
-                    .context("Notebook ID is not a string")?
+                    .context("Notebook entry: id not found at nb[0][0]")?
                     .to_string();
                 return Ok(id);
             }
@@ -126,10 +136,9 @@ impl NotebookLMClient {
         let result = self
             .rpc(CREATE_NOTEBOOK, &json!([name, null, null, [2], [1]]), "/")
             .await?;
-        // result[0] = notebook_id
-        let id = result[0]
+        let id = result[2]
             .as_str()
-            .context("CREATE_NOTEBOOK: missing notebook ID in response")?
+            .with_context(|| format!("CREATE_NOTEBOOK: notebook ID not at result[2]: {result}"))?
             .to_string();
         Ok(id)
     }
