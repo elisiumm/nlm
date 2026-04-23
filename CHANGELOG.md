@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/elisiumm/nlm/compare/v0.2.0...v0.2.1) (2026-04-23)
+
+
+### Bug Fixes
+
+* **notion:** improve error detail, render child pages and tables inline ([1452998](https://github.com/elisiumm/nlm/commit/1452998e913ec0388ee54b07cddd8fbe98a33beb))
+
 ## [0.2.0](https://github.com/elisiumm/nlm/compare/v0.1.1...v0.2.0) (2026-04-15)
 
 
