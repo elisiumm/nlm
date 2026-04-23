@@ -130,9 +130,15 @@ async fn render_children(
             .header("Notion-Version", NOTION_VERSION)
             .send()
             .await
-            .with_context(|| format!("Failed to fetch children of block {block_id}"))?
-            .error_for_status()
-            .with_context(|| format!("Notion API error on block {block_id}"))?;
+            .with_context(|| format!("Failed to fetch children of block {block_id}"))?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Notion API error on block {block_id}: HTTP {status}\n{body}"
+            );
+        }
+        let resp = resp;
 
         let page: serde_json::Value = resp.json().await?;
 
@@ -265,7 +271,13 @@ fn render_block<'a>(
                     .get("title")
                     .and_then(|v| v.as_str())
                     .unwrap_or("untitled");
-                writeln!(out, "{prefix}_[child page: {title}]_\n").ok();
+                // Use the block's own id to recurse into the child page content.
+                if let Some(child_id) = block.get("id").and_then(|v| v.as_str()) {
+                    writeln!(out, "{prefix}## {title}\n").ok();
+                    render_children(client, child_id, token, indent, out).await?;
+                } else {
+                    writeln!(out, "{prefix}_[child page: {title}]_\n").ok();
+                }
             }
             "child_database" => {
                 let title = data
@@ -273,6 +285,25 @@ fn render_block<'a>(
                     .and_then(|v| v.as_str())
                     .unwrap_or("untitled");
                 writeln!(out, "{prefix}_[child database: {title}]_\n").ok();
+            }
+            // table block: children (table_row) are rendered via has_children recursion below.
+            // We emit nothing here — the rows carry all the data.
+            "table" => {}
+            "table_row" => {
+                // cells is an array of arrays of rich_text objects (one inner array per cell).
+                let cells = data
+                    .get("cells")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let rendered: Vec<String> = cells
+                    .iter()
+                    .map(|cell| {
+                        // Each cell is an array of rich_text items.
+                        render_rich_text(Some(cell))
+                    })
+                    .collect();
+                writeln!(out, "{prefix}| {} |", rendered.join(" | ")).ok();
             }
             "unsupported" => {
                 writeln!(out, "{prefix}_[unsupported Notion block skipped]_\n").ok();
